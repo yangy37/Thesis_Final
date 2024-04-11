@@ -2,11 +2,16 @@
 title: "Thesis"
 author: "Yi Yang"
 date: "2023-12-18"
-output: pdf_document
+output:
+  pdf_document:
+    latex_engine: xelatex
+  html_document:
+    df_print: paged
+encoding: UTF-8
 ---
 
-```{r, warning=FALSE}
-library(readxl);
+```{r, warning=FALSE, message=FALSE}
+library(readxl)
 library(pander)
 library(ggplot2)
 library(moments)
@@ -19,64 +24,414 @@ library(car)
 library(VGAM)
 library(pROC)
 library(lmtest)
+library(fastDummies)
+library(table1)
+library(haven)
+library(caret)
+library(corrplot)
+library(r02pro)
+library(plyr)
+library(tree)
+library(gbm) 
+library(leaps) 
+library(readr)
+library(glmnet)
+library(dplyr)
+
 ```
 
-```{r}
+```{r, message=FALSE}
 data <- read_excel("Her-2 （2+）FISH(-).xlsx");
-head(data);
-data$转移[is.na(data$转移)] <- 0;
-data <- data[,5:29]
-data <- data %>% dplyr::select(-FISH, -HER2, -复发时间)
-data %>%
+head(data)
+#data <- data[,5:29]
+
+names(data)[names(data) == "转移"] <- "metastasis"
+names(data)[names(data) == "年龄"] <- "age"
+names(data)[names(data) == "间隔（手术-最近检查）"] <- "interval"
+names(data)[names(data) == "是否新辅助"] <- "new_assistance"
+names(data)[names(data) == "手术术式"] <- "survey_type"
+names(data)[names(data) == "癌类型"] <- "Cancer_type"
+names(data)[names(data) == "神经侵犯与否"] <- "Neural_invasion"
+names(data)[names(data) == "脉管癌栓与否"] <- "Lymphatic_or_blood_vascular_tumor_emboli"
+names(data)[names(data) == "癌类型"] <- "Cancer_type"
+names(data)[names(data) == "是否＞2cm"] <- "Size_greater_than_2"
+names(data)[names(data) == "T分期"] <- "T_stage"
+names(data)[names(data) == "N分期"] <- "M_stage"
+names(data)[names(data) == "TNM分期"] <- "TNM_stage"
+names(data)[names(data) == "肿瘤大小"] <- "Tumor_size"
+names(data)[names(data) == "淋巴结数量"] <- "Number_of_lymph_nodes"
+names(data)[names(data) == "分子分型"] <- "Molecular_typing"
+names(data)[names(data) == "术式(LN)"] <- "LN"
+names(data)[names(data) == "PR"] <- "PR"
+names(data)[names(data) == "ER"] <- "ER"
+data <- data %>% mutate(Tumor_size = as.numeric(Tumor_size))
+data <- data %>% mutate(interval = as.numeric(interval))
+head(data)
+data <- data[,c(5:22, 25:26, 29, 38)]
+head(data)
+data$metastasis[is.na(data$metastasis)] <- 0;
+
+data_label <- data
+data_label <- data_label %>% mutate(new_assistance = as.character(new_assistance))
+data_label <- data_label %>% mutate(Cancer_type = as.character(Cancer_type))
+data_label <- data_label %>% mutate(survey_type = as.character(survey_type))
+data_label <- data_label %>% mutate(Neural_invasion = as.character(Neural_invasion))
+data_label <- data_label %>% mutate(Lymphatic_or_blood_vascular_tumor_emboli = as.character(Lymphatic_or_blood_vascular_tumor_emboli))
+data_label <- data_label %>% mutate(Size_greater_than_2 = as.character(Size_greater_than_2))
+data_label <- data_label %>% mutate(T_stage = as.character(T_stage))
+data_label <- data_label %>% mutate(M_stage = as.character(M_stage))
+data_label <- data_label %>% mutate(TNM_stage = as.character(TNM_stage))
+data_label <- data_label %>% mutate(Molecular_typing = as.character(Molecular_typing))
+data_label <- data_label %>% mutate(LN = as.character(LN))
+data_label <- data_label %>% mutate(PR = as.character(PR))
+data_label <- data_label %>% mutate(ER = as.character(ER))
+table1(~.|metastasis , data = data_label)
+
+
+
+data_2 <- dummy_cols(data,select_columns = 
+                            c( 'new_assistance', 'survey_type', 'Cancer_type',
+                              'Neural_invasion','Lymphatic_or_blood_vascular_tumor_emboli', 
+                              'Size_greater_than_2', 'T_stage', 'M_stage', 'TNM_stage',
+                              'Molecular_typing', 'LN', 'PR', 'ER'))
+data_3 <- data_2 %>% dplyr::select(-new_assistance, -survey_type, 
+                                             -Cancer_type, -Neural_invasion,
+                                             -Lymphatic_or_blood_vascular_tumor_emboli, 
+                                             -Size_greater_than_2, -T_stage, 
+                                             -M_stage, -TNM_stage, -Molecular_typing, -LN, 
+                                             -PR, -ER,-Ki67)
+data_3$metastasis[is.na(data_3$metastasis)] <- 0;
+data_3$interval[is.na(data_3$interval)] <- 0;
+#data <- data[,c(1:20, 22)]
+dim(data_3)
+table(data_3$metastasis)
+```
+
+```{r, message=FALSE}
+data_3 %>%
   keep(is.numeric) %>% 
   gather() %>% 
   ggplot(aes(value)) +
     facet_wrap(~ key, scales = "free") +
     geom_histogram(col = 'orange')
 
-data$tumor_size <- as.numeric(data$肿瘤大小)
-data <- data %>% dplyr::select(-肿瘤大小)
-pander(skewness(data), caption = 'Skewness of numeric data')
+dim(data_3)
 
 
-# Check Correlation
-cor <- cor(data);
-pander(cor);
 ```
+
+```{r, message=FALSE}
+table1(~.|metastasis , data = data_3)
+```
+
+```{r, message=FALSE}
+data_3 %>%
+  keep(is.numeric) %>%
+  gather() %>%
+  ggplot(aes(value)) +
+  facet_wrap(~ key, scales = "free") +
+  geom_histogram()
+
+
+tr_ind <- 1:(nrow(data_3) * 0.7)
+data_tall <- data_3[tr_ind, ]
+nrow(data_tall)
+data_te <- data_3[-tr_ind, ]
+nrow(data_te)
+
+tr_ind2 <- 1:(nrow(data_tall) * 0.7)
+data_tr <- data_tall[tr_ind2, ]
+nrow(data_tr)
+data_va <- data_tall[-tr_ind2, ]
+nrow(data_va)
+```
+Variable Selection
+BIC
+```{r, message=FALSE}
+set.seed(0)
+fit_BIC <- regsubsets(metastasis ~ ., data = data_tr, really.big=T)
+summary_BIC <- summary(fit_BIC)
+min_BIC <- which.min(summary_BIC$bic)
+min_BIC
+coef_BIC = coef(fit_BIC,min_BIC)
+coef_BIC
+formula1 <- metastasis ~CA125+interval+LN_2 +Cancer_type_9+Number_of_lymph_nodes+Tumor_size;
+```
+Backward Stepwise Selection with Cp
+```{r, message=FALSE}
+fit_BACKWARD <- regsubsets(metastasis ~ Number_of_lymph_nodes + ., 
+                           data = data_tr, method = "backward", 
+                           nvmax = ncol(data_tr)-1, really.big=T)
+summary_BACKWARD <- summary(fit_BACKWARD)
+mix_BACKWARD <- which.min(summary_BACKWARD$cp)
+mix_BACKWARD
+coef_BACKWARD = coef(fit_BACKWARD, mix_BACKWARD)
+coef_BACKWARD
+formula2 <- metastasis ~ CA125+interval+survey_type_3+survey_type_4+Cancer_type_3+Cancer_type_4+Molecular_typing_1+Molecular_typing_2+LN_1+PR_1+ER_1+Cancer_type_9+Molecular_typing_4+Number_of_lymph_nodes+Tumor_size
+```
+
+
+```{r, message=FALSE}
+library(pROC)
+set.seed(0)
+predict_BIC = glm(formula1,data_tr,family = "binomial") 
+pred_BIC = round(predict(predict_BIC,data_te,type = "response")) 
+roc_bic <- roc(data_te$metastasis,pred_BIC,smooth=F)
+auc(roc_bic)
+
+predict_BACKWARD  = glm(formula2,data_tr,family = "binomial") 
+pred_BACKWARD = round(predict(predict_BACKWARD,data_te,type = "response")) 
+roc_back <- roc(data_te$metastasis,pred_BACKWARD,smooth=F)
+auc(roc_back)
+
+```
+cross validation
+#Random Forest
+```{r,message=FALSE,warning=FALSE}
+library(randomForest)
+set.seed(0)
+K <- 2
+n_all <- nrow(data_tr)
+n_all2 <- nrow(data_va)
+fold_auc_rf<-as.numeric()
+auc_all <- c()
+fold_ind <- sample(1:K, n_all, replace = TRUE)
+fold_ind2 <- sample(1:K, n_all2, replace = TRUE)
+  
+for (i in c(10,100,10)) {
+  for (j in 1:K) {
+    rf_model <- randomForest(formula1, data = data_tr[fold_ind != j, ], ntree = i, 
+                             importance = T)
+    pred_prob <- predict(rf_model, newdata = data_va[fold_ind2 == j, ], type = "response")
+    pred_label <- ifelse(pred_prob > 0.5, 1, 0)
+    roc_rf <- roc(data_va[fold_ind2 == j, ]$metastasis,pred_label,smooth=F)
+    auc_all[((i/10 -1)*10) + j] <- auc(roc_rf)
+  }
+}
+which.max(auc_all)
+
+rf_model <- randomForest(formula1, data = data_tr, ntree = 30, importance = T)
+pred_prob <- predict(rf_model, newdata = data_te, type = "response")
+rf_pred_label <- ifelse(pred_prob > 0.5, 1, 0)
+rf_pred<-as.character(pred_prob)
+rf_pred<-as.numeric(pred_prob)
+rf_roc<-roc(data_te$metastasis,rf_pred,smooth=F)
+
+plot(rf_roc, auc.polygon=T, auc.polygon.col='pink', smooth=F,print.auc=T, 
+     max.auc.polygon=T,print.thres.cex=0.8, lty=1,main='ROC for Random Forrest Model',print.thres=T)
+
+rf_auc <- auc(rf_roc)
+rf_auc
+
+plot(rf_model)
+```
+
+#KNN
+```{r,warning=FALSE,message=FALSE}
+set.seed(0)
+K <- 2
+n_all <- nrow(data_tr)
+n_all2 <- nrow(data_va)
+fold_auc_rf<-as.numeric()
+auc_all3 <- c()
+fold_ind <- sample(1:K, n_all, replace = TRUE)
+fold_ind2 <- sample(1:K, n_all2, replace = TRUE)
+
+table(data$metastasis)
+
+for (j in 2:K) {
+  for (i in 5:20) {
+     knn_model <- knn3(formula1, data_tr[fold_ind != j, ], k = i)
+    knn_prob <- predict(knn_model, newdata = data_va[fold_ind2 == j, ])
+    pred_label <- ifelse(knn_prob > 0.5, 1, 0)
+    roc_rf <- roc(data_va[fold_ind2 == j, ]$metastasis,pred_label[,2],smooth=F)
+    auc_all3[((j-2)*15) + i - 4] <- auc(roc_rf)
+  }
+}
+which.max(auc_all3)
+knn_model <- knn3(formula1, data_tr, k = 2)
+knn_prob <- predict(knn_model, newdata = data_te)
+pred_label <- ifelse(knn_prob > 0.5, 1, 0)
+knn_roc <- roc(data_te$metastasis,pred_label[,2],smooth=F)
+plot(knn_roc, auc.polygon=T, auc.polygon.col='pink', smooth=F,print.auc=T, 
+     max.auc.polygon=T,print.thres.cex=0.8, lty=1,main='ROC doe KNN Model',print.thres=T)
+
+knn_auc <- auc(knn_roc)
+knn_auc
+
+```
+
+#CART
+Classification and Regression Trees
+```{r, message=FALSE}
+library(rpart)
+set.seed(0)
+K <- 2
+n_all <- nrow(data_tr)
+n_all2 <- nrow(data_va)
+fold_auc_rf<-as.numeric()
+auc_all3 <- c()
+fold_ind <- sample(1:K, n_all, replace = TRUE)
+fold_ind2 <- sample(1:K, n_all2, replace = TRUE)
+
+for (j in 2:K) {
+  for (i in 5:20) {
+    rpart_model <- rpart(formula1, data_tr)
+    rpart_prob <- predict(rpart_model, newdata = data_va[fold_ind2 == j, ])
+    pred_label <- ifelse(rpart_prob > 0.5, 1, 0)
+    roc_rf <- roc(data_va[fold_ind2 == j, ]$metastasis, rpart_prob, smooth = FALSE)
+    auc_all3[((j - 1) * 15) + i - 4] <- auc(roc_rf)
+  }
+}
+which.max(auc_all3)
+rpart_model <- rpart(formula1, data_tr) 
+rpart_prob <- predict(rpart_model, newdata = data_va)
+pred_label <- ifelse(rpart_prob > 0.5, 1, 0)
+roc_rf <- roc(data_va$metastasis, rpart_prob, smooth = FALSE)
+plot(roc_rf, auc.polygon=T, auc.polygon.col='pink', smooth=F,print.auc=T, 
+     max.auc.polygon=T,print.thres.cex=0.8, lty=1,main='ROC for CART Model',print.thres=T)
+
+rpart_auc <- auc(roc_rf)
+rpart_auc
+
+```
+
+#XGBoost
+```{r, message=FALSE}
+library(xgboost)
+set.seed(0)
+x_train <- as.matrix(data_tr[, c("CA125","interval","LN_2","Cancer_type_9",
+                                 "Number_of_lymph_nodes","Tumor_size")])
+x_vali <- as.matrix(data_va[, c("CA125","interval","LN_2","Cancer_type_9",
+                                 "Number_of_lymph_nodes","Tumor_size")])
+y_train <- data_tr$metastasis
+x_test <- as.matrix(data_te[, c("CA125","interval","LN_2","Cancer_type_9",
+                                "Number_of_lymph_nodes","Tumor_size")])
+
+auc_all4 <- c()
+for (j in 50:100) {
+  xgboost_model <- xgboost(data = x_train, label = y_train, nrounds = j, 
+                         objective = "multi:softmax", num_class = 2, verbose = 0)
+  xgboost_prob <- predict(xgboost_model, newdata = as.matrix(x_vali))
+  pred_label <- ifelse(xgboost_prob > 0.5, 1, 0)
+  roc_xgboost <- roc(data_va$metastasis,pred_label,smooth=F)
+  auc_all4[j - 49] <- auc(roc_xgboost)
+}
+which.min(auc_all4)
+xgboost_model <- xgboost(data = x_train, label = y_train, nrounds = 50, 
+                         objective = "multi:softmax", num_class = 2)
+xgboost_prob <- predict(xgboost_model, newdata = as.matrix(x_test))
+pred_label <- ifelse(xgboost_prob > 0.5, 1, 0)
+roc_xgboost <- roc(data_te$metastasis,pred_label,smooth=F)
+plot(roc_xgboost, auc.polygon=T, auc.polygon.col='pink', smooth=F,print.auc=T, 
+     max.auc.polygon=T,print.thres.cex=0.8, lty=1,main='ROC for XGBoost Model',print.thres=T)  
+xgboost_auc <- auc(roc_xgboost)
+xgboost_auc
+```
+
+#Nerual Network
+```{r, message=FALSE}
+set.seed(0)
+library(neuralnet)
+
+nn_model <- neuralnet(formula1, data = data_tr, hidden = c(3, 2), linear.output = FALSE)
+nn_prob <- predict(nn_model, data_va)
+nn_label <- ifelse(nn_prob > 0.5, 1, 0)
+roc_nn <- roc(data_va$metastasis,nn_label,smooth=F)
+plot(roc_nn, auc.polygon=T, auc.polygon.col='pink', smooth=F,print.auc=T, 
+     max.auc.polygon=T,print.thres.cex=0.8, lty=1,main='ROC for Nerual Network',print.thres=T)  
+
+nn_auc <- auc(roc_nn)
+nn_auc
+
+```
+
+
 ```{r}
-#Univariate Analysis
-summary(data)
+gbm_confusion<-table(data_te$metastasis,rf_pred_label,dnn=c('Actual','Predicted'))
+gbm_confusion
+lr_accuracy <- (gbm_confusion[1,1] + gbm_confusion[2,2]) / (gbm_confusion[1,1] + gbm_confusion[1,2] + gbm_confusion[2,1] + gbm_confusion[2,2])
+
+lr_precision <- gbm_confusion[2,2] / (gbm_confusion[2,2] + gbm_confusion[1,2])
+
+lr_recall <- gbm_confusion[2,2] / (gbm_confusion[2,2] + gbm_confusion[2,1])
+
+lr_f1 <- 2/(1/lr_precision + 1/lr_recall)
+
+lr_accuracy
+lr_precision
+lr_recall
+lr_f1
+
+var_importance <- importance(rf_model)
+var_importance <- var_importance[order(var_importance[, 1], decreasing = TRUE), ]
+barplot(var_importance[, 1], main = "Variable Importance", horiz = TRUE)
+#CA125+interval+LN_2 +Cancer_type_9+Number_of_lymph_nodes+Tumor_size
+var_importance
 ```
-```{r}
-## T - Test for Continuous Predictors
-t.test(data$转移,data$淋巴结数量)
-t.test(data$转移,data$CA125)
-t.test(data$转移,data$tumor_size)
+## Discussion: 
 
-# Checking for outliers in continuous variables
-cont_var_long <- pivot_longer(data, cols=c(淋巴结数量, CA125, tumor_size), 
-                                    names_to = "variable", values_to = "value") 
-## Create boxplots for age, cigage, and alcage
-ggplot(cont_var_long, aes(x = variable, y = value)) + 
-    geom_boxplot() +
-    theme_minimal() +
-    ggtitle("Boxplots for Continuous Variables") +
-    xlab("Variable") +
-    ylab("Value")
+### Variable Selection: 
 
-cor <- cor(data[c("淋巴结数量", "tumor_size", "CA125")])
-print(cor)
+#### Bayesian Information Criterion
+Bayesian Information Criterion (BIC) is a widely used model selection criterion that balances model fit and complexity by maximizing the likelihood function. It considers the number of parameters in the model and tends to favor simpler models to avoid overfitting. BIC offers several advantages, including its ability to handle model complexity and its consistency under certain conditions, ensuring that the probability of selecting the true model approaches 1 as the sample size approaches infinity. Additionally, BIC is computationally simple, making it easy to understand and implement. However, BIC tends to penalize complex models excessively, potentially overlooking some complex relationships in the data. It is also sensitive to sample size, often selecting overly simple models for small sample sizes, leading to underfitting. Furthermore, BIC's consistency results rely on assumptions such as the true model being among the candidate models and correctly specified, which may not hold in practice.
 
-data$淋巴结数量 <- scale(data$淋巴结数量)
-data$tumor_size <- scale(data$tumor_size)
-data$CA125 <- scale(data$CA125)
-```
+#### Backward selection
+Backward selection is a feature selection method that iteratively fits the model and removes the least significant features to simplify the model. It helps reduce model complexity by eliminating features that have little impact on the response variable, thereby improving the model's interpretability and generalization ability. However, backward selection is a greedy algorithm and may get stuck in local optima, failing to find the global optimal solution. It can also be computationally expensive for large feature sets, as it requires repeatedly fitting the model and evaluating feature significance. Additionally, backward selection typically considers the significance of individual features and may overlook the impact of feature interactions on the model.
 
-```{r}
-#colnames(data) <- c("a1", "a2","a3", "a4","a5", "a6","a7", "a8","a9", "a10","a11", "a12","a13", "a14","a15", "a16","a17", "a18","a19", "a20","a21", "a22","a23", "a24","a25", "a26","a27", "a28","a29", "a30","a31", "a32","a33", "a34","a35", "a36","a37", "a38","a39")
-```
+### Machine Learning
+This study utilized random forest, k-nearest neighbors (KNN), classification and regression trees (CART), XGBoost, and neural networks for analysis.
 
-```{r}
-fit1<-glm(转移~.,  data = data)
-summary(fit1)
-```
+#### Random Forest
+Random Forest (RF) is a powerful ensemble learning method that constructs a multitude of decision trees during training and outputs the mode of the classes (classification) or the mean prediction (regression) of individual trees. RF offers several advantages, including its ability to handle high-dimensional data and provide estimates of variable importance, which can aid in feature selection. Additionally, RF is less prone to overfitting compared to individual decision trees due to its ensemble nature. However, RF can be computationally expensive for large datasets, and its performance may degrade with highly imbalanced class distributions.
+
+#### K-Nearest Neighbors
+K-Nearest Neighbors (KNN) is a simple yet effective non-parametric classification and regression method. KNN makes predictions based on the majority class or average value of the k nearest data points in the feature space. One advantage of KNN is its simplicity and ease of implementation, making it suitable for various applications. However, KNN can be computationally expensive for large datasets, as it requires calculating distances between the target point and all other points in the dataset. Additionally, KNN is sensitive to irrelevant or redundant features and requires careful selection of the distance metric and the value of k.
+
+#### Classification and Regression Trees
+Classification and Regression Trees (CART) are a popular decision tree algorithm used for both classification and regression tasks. CART recursively partitions the feature space into regions that minimize impurity, such as Gini impurity or entropy. One key advantage of CART is its interpretability, as the resulting tree can be visualized and easily understood. However, CART is prone to overfitting, especially with complex datasets, and can be unstable, leading to different trees with slight variations in the training data.
+
+#### XGBoost
+XGBoost is an optimized implementation of gradient boosting machines, which sequentially combines weak learners (typically decision trees) to create a strong learner. XGBoost has gained popularity due to its efficiency, scalability, and high performance in various machine learning competitions. XGBoost implements regularization techniques to reduce overfitting and provides several hyperparameters for fine-tuning. However, XGBoost requires careful hyperparameter tuning and can be computationally expensive, especially for large datasets.
+
+#### Neural Networks
+Neural Networks (NNs) are a class of models inspired by the structure and function of the human brain. NNs consist of interconnected nodes organized in layers, with each node applying a non-linear activation function to its inputs. NNs are capable of learning complex non-linear relationships in the data and are effective for large datasets with high-dimensional features. However, NNs require a large amount of data to train effectively and are computationally intensive. Additionally, NNs can be prone to overfitting if not regularized properly and can be challenging to interpret due to their complex architecture.
+
+### Model Slection
+
+#### ROC
+The Receiver Operating Characteristic (ROC) curve is a graphical representation of a binary classification model's performance that illustrates the trade-off between its sensitivity (true positive rate) and specificity (true negative rate) across different threshold values. The curve is created by plotting the true positive rate against the false positive rate at various threshold settings. 
+
+#### AUC
+The Area Under the ROC Curve (AUC) is a single scalar value that summarizes the overall performance of the model. AUC ranges from 0 to 1, where a higher value indicates better discrimination ability. AUC is a widely used metric for evaluating binary classification models because it provides a comprehensive assessment of the model's performance across all possible threshold settings, making it suitable for comparing different models and assessing their predictive power.
+
+## Results: 
+CA125: This variable has the highest importance based on both metrics (IncMSE and IncNodePurity). A high value indicates that permuting (IncMSE) or using it for splitting nodes (IncNodePurity) leads to a significant increase in prediction error or impurity, suggesting it is a key predictor in your model.
+
+Tumor_size: The second most important variable. While not as influential as CA125, it still has a substantial impact on model performance when its values are permuted or used for node splitting.
+
+Number_of_lymph_nodes: This variable is also important, but to a lesser extent than CA125 and Tumor_size. It still contributes significantly to the model's predictive power.
+
+Interval: This variable has a negative IncMSE value, indicating that permuting it may slightly decrease the mean squared error, but it has a positive IncNodePurity value, suggesting it is still important for node splitting despite the decrease in MSE.
+
+LN_2: This variable has a relatively low importance based on both metrics, indicating it has a smaller impact on model performance compared to the other variables.
+
+Cancer_type_9: This variable has no importance based on both metrics, suggesting it may not be a relevant predictor in your model.
+
+Overall, when interpreting variable importance in a random forest model, it's essential to consider both metrics (IncMSE and IncNodePurity) to get a comprehensive understanding of each variable's impact on the model.
+
+
+
+
+### MCC
+#### Accuracy
+Accuracy (lr_accuracy): It is the proportion of correct predictions over all predictions. In your case, it's approximately 0.966, indicating that the model is accurate in predicting both classes.
+
+#### Precision
+Precision (lr_precision): It is the proportion of true positive predictions (metastasis) among all positive predictions (both true positives and false positives). Your precision is 0.5, suggesting that when the model predicts metastasis, it is correct 50% of the time.
+
+#### Recall
+Recall (lr_recall), also known as sensitivity or true positive rate (TPR): It is the proportion of true positives predicted correctly among all actual positives. Your recall is 0.571, indicating that the model correctly identifies about 57.1% of actual metastasis cases.
+
+#### F1
+F1 Score (lr_f1): It is the harmonic mean of precision and recall, providing a balance between the two. It is useful when there is an uneven class distribution. Your F1 score is 0.533, suggesting a moderate balance between precision and recall.
